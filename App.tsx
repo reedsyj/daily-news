@@ -20,6 +20,11 @@ const App: React.FC = () => {
   const [activeView, setActiveView] = useState<'FEED' | 'FAVORITES'>('FEED');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
+  const isAdmin = !!currentUser && (
+    (process.env.ADMIN_EMPLOYEE_ID && currentUser.employeeId === process.env.ADMIN_EMPLOYEE_ID) ||
+    (process.env.ADMIN_USERNAME && currentUser.username === process.env.ADMIN_USERNAME)
+  );
+
   // Helper to sync local favorites state
   const refreshFavorites = useCallback(() => {
     if (currentUser) {
@@ -97,6 +102,11 @@ const App: React.FC = () => {
     refreshFavorites();
   };
 
+  const handleRefresh = () => {
+    if (!isAdmin) return;
+    fetchData();
+  };
+
   // Decide which list to render
   const sourceList = activeView === 'FAVORITES' ? favorites : news;
 
@@ -117,11 +127,12 @@ const App: React.FC = () => {
         currentUser={currentUser} 
         onLoginClick={() => setIsAuthOpen(true)} 
         onLogout={handleLogout}
-        onRefresh={fetchData}
+        onRefresh={handleRefresh}
         isRefreshing={loading}
         lastUpdated={lastUpdated}
         activeView={activeView}
         onViewChange={(view) => setActiveView(view)}
+        canRefresh={isAdmin}
       />
 
       <main className="container mx-auto px-4 py-8">

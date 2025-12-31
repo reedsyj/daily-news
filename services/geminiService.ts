@@ -1,9 +1,18 @@
-import { GoogleGenAI } from "@google/genai";
 import { Category, NewsItem } from "../types";
 
-// NOTE: In a real production app, API keys should not be exposed in frontend code.
-// For this demo structure request, we assume it's injected via env or user selects it.
-// The code relies on process.env.API_KEY as per instructions.
+export async function fetchNewsByPrompt(prompt: string): Promise<string> {
+  const r = await fetch("/api/gemini", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt }),
+  });
+  if (!r.ok) {
+    const text = await r.text();
+    throw new Error(text);
+  }
+  const data = await r.json();
+  return data.text as string;
+}
 
 const mapCategoryToQuery = (category: Category): string => {
   switch (category) {
@@ -21,8 +30,6 @@ const mapCategoryToQuery = (category: Category): string => {
 
 export const fetchAnalysedNews = async (category: Category): Promise<NewsItem[]> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    
     const query = mapCategoryToQuery(category);
     
     // Calculate date 7 days ago for context in prompt
@@ -71,15 +78,7 @@ export const fetchAnalysedNews = async (category: Category): Promise<NewsItem[]>
       }
     `;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: {
-        tools: [{ googleSearch: {} }],
-      }
-    });
-
-    let rawText = response.text;
+    let rawText = await fetchNewsByPrompt(prompt);
     if (!rawText) return [];
 
     // Sanitize response if the model included Markdown code blocks

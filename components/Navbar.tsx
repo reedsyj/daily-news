@@ -12,6 +12,7 @@ interface NavbarProps {
   lastUpdated: Date | null;
   activeView: 'FEED' | 'FAVORITES';
   onViewChange: (view: 'FEED' | 'FAVORITES') => void;
+  canRefresh?: boolean;
 }
 
 const Navbar: React.FC<NavbarProps> = ({ 
@@ -22,7 +23,8 @@ const Navbar: React.FC<NavbarProps> = ({
   isRefreshing,
   lastUpdated,
   activeView,
-  onViewChange
+  onViewChange,
+  canRefresh = false
 }) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
@@ -67,9 +69,9 @@ const Navbar: React.FC<NavbarProps> = ({
 
           <button 
             onClick={onRefresh}
-            disabled={isRefreshing}
-            className={`p-2 rounded-full hover:bg-gray-800 transition-colors ${isRefreshing ? 'animate-spin text-blue-400' : 'text-gray-400'}`}
-            title="Refresh Content"
+            disabled={!canRefresh || isRefreshing}
+            className={`p-2 rounded-full transition-colors ${canRefresh ? 'hover:bg-gray-800' : ''} ${isRefreshing ? 'animate-spin text-blue-400' : canRefresh ? 'text-gray-400' : 'text-gray-700 cursor-not-allowed'}`}
+            title={canRefresh ? "Refresh Content" : "Refresh restricted"}
           >
             <RefreshCw size={20} />
           </button>
