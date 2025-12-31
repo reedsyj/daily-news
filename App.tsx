@@ -3,7 +3,7 @@ import Navbar from './components/Navbar';
 import NewsCard from './components/NewsCard';
 import AuthModal from './components/AuthModal';
 import { fetchAnalysedNews } from './services/geminiService';
-import { mockAuth, mockDb } from './services/mockBackend';
+import { authService, dbService } from './services/supabaseService';
 import { User, Category, NewsItem } from './types';
 import { Cpu, Radio, Zap, Star } from 'lucide-react';
 
@@ -21,14 +21,14 @@ const App: React.FC = () => {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const isAdmin = !!currentUser && (
-    (process.env.ADMIN_EMPLOYEE_ID && currentUser.employeeId === process.env.ADMIN_EMPLOYEE_ID) ||
-    (process.env.ADMIN_USERNAME && currentUser.username === process.env.ADMIN_USERNAME)
+    (process.env.ADMIN_EMPLOYEE_ID && currentUser.employeeId === process.env.ADMIN_EMPLOYEE_ID)
   );
 
   // Helper to sync local favorites state
-  const refreshFavorites = useCallback(() => {
+  const refreshFavorites = useCallback(async () => {
     if (currentUser) {
-      setFavorites(mockDb.getUserFavorites(currentUser.id));
+      const favs = await dbService.getFavorites(currentUser.id);
+      setFavorites(favs);
     } else {
       setFavorites([]);
     }
@@ -70,10 +70,12 @@ const App: React.FC = () => {
 
   useEffect(() => {
     // Check for logged in user
-    const savedUser = mockAuth.getCurrentUser();
-    if (savedUser) {
-      setCurrentUser(savedUser);
-    }
+    const checkUser = async () => {
+      const user = await authService.getCurrentUser();
+      setCurrentUser(user);
+    };
+    checkUser();
+    
     // Initial fetch
     fetchData();
   }, [fetchData]);
@@ -91,14 +93,21 @@ const App: React.FC = () => {
     setIsAuthOpen(false);
   };
 
-  const handleLogout = () => {
-    mockAuth.logout();
+  const handleLogout = async () => {
+    await authService.signOut();
     setCurrentUser(null);
   };
 
-  const handleToggleFavorite = (item: NewsItem) => {
+  const handleToggleFavorite = async (item: NewsItem) => {
     if (!currentUser) return;
-    mockDb.toggleFavorite(currentUser.id, item);
+    
+    const isFav = favorites.some(f => f.id === item.id);
+    if (isFav) {
+      await dbService.removeFavorite(currentUser.id, item.id);
+    } else {
+      await dbService.addFavorite(currentUser.id, item);
+    }
+    
     refreshFavorites();
   };
 

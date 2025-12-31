@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, UserPlus, LogIn, AlertCircle } from 'lucide-react';
-import { mockAuth } from '../services/mockBackend';
+import { authService } from '../services/supabaseService';
 import { User } from '../types';
 
 interface AuthModalProps {
@@ -15,6 +15,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSuccess }
   const [error, setError] = useState('');
 
   // Form Fields
+  // const [email, setEmail] = useState(''); // Removed email state
   const [username, setUsername] = useState('');
   const [employeeId, setEmployeeId] = useState('');
   const [password, setPassword] = useState('');
@@ -23,6 +24,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSuccess }
 
   const resetForm = () => {
     setError('');
+    // setEmail('');
     setUsername('');
     setEmployeeId('');
     setPassword('');
@@ -39,22 +41,29 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSuccess }
     setLoading(true);
 
     try {
-      let user: User;
       if (mode === 'LOGIN') {
-        // Login uses username/employeeId field + password
-        const identifier = username || employeeId; 
-        if (!identifier || !password) throw new Error("Please fill in all fields");
-        user = await mockAuth.login(identifier, password);
+        if (!employeeId || !password) throw new Error("Please fill in Employee ID and password");
+        const { user: authUser } = await authService.signIn(employeeId, password);
+        
+        if (authUser) {
+          const user = await authService.getCurrentUser();
+          if (user) onLoginSuccess(user);
+        }
       } else {
-        // Register needs all 3
+        // Register needs all fields except email
         if (!username || !employeeId || !password) throw new Error("All fields are required");
-        user = await mockAuth.register(employeeId, username, password);
+        const { user: authUser } = await authService.signUp(employeeId, password, username);
+        
+        if (authUser) {
+           const user = await authService.getCurrentUser();
+           if (user) onLoginSuccess(user);
+        }
       }
       
-      onLoginSuccess(user);
       onClose();
       resetForm();
     } catch (err: any) {
+      console.error(err);
       setError(err.message || "Authentication failed");
     } finally {
       setLoading(false);
@@ -94,7 +103,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSuccess }
           </h2>
           <p className="text-gray-400 text-sm mb-6">
             {mode === 'LOGIN' 
-              ? 'Enter your credentials to access the insider feed.' 
+              ? 'Enter your Employee ID to access the insider feed.' 
               : 'Create your professional account to comment and share.'}
           </p>
 
@@ -107,35 +116,21 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSuccess }
 
           <form onSubmit={handleSubmit} className="space-y-4">
             
-            {/* Login Mode Fields */}
-            {mode === 'LOGIN' && (
-              <>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Username or Employee ID</label>
-                  <input 
-                    type="text" 
-                    value={username} // Reusing username state for identifier
-                    onChange={(e) => setUsername(e.target.value)}
-                    className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-600 outline-none transition-all placeholder-gray-700"
-                    placeholder="e.g. R522222 or 李白_01"
-                  />
-                </div>
-              </>
-            )}
+            {/* Employee ID Field (Both Modes) */}
+            <div>
+               <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Employee ID (工号)</label>
+               <input 
+                 type="text" 
+                 value={employeeId}
+                 onChange={(e) => setEmployeeId(e.target.value)}
+                 className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-600 outline-none transition-all placeholder-gray-700"
+                 placeholder="e.g. R522222"
+               />
+            </div>
 
-            {/* Register Mode Fields */}
+            {/* Register Mode: Username */}
             {mode === 'REGISTER' && (
               <>
-                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Employee ID (工号)</label>
-                  <input 
-                    type="text" 
-                    value={employeeId}
-                    onChange={(e) => setEmployeeId(e.target.value)}
-                    className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-purple-600 outline-none transition-all placeholder-gray-700"
-                    placeholder="e.g. R522222"
-                  />
-                </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Username (用户名)</label>
                   <input 

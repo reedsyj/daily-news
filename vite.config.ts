@@ -11,8 +11,7 @@ export default defineConfig(({ mode }) => {
       },
       plugins: [react()],
       define: {
-        'process.env.ADMIN_EMPLOYEE_ID': JSON.stringify(env.ADMIN_EMPLOYEE_ID),
-        'process.env.ADMIN_USERNAME': JSON.stringify(env.ADMIN_USERNAME)
+        'process.env.ADMIN_EMPLOYEE_ID': JSON.stringify(env.ADMIN_EMPLOYEE_ID)
       },
       resolve: {
         alias: {
