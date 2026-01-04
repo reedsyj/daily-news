@@ -5,7 +5,7 @@ import { User, NewsItem } from '../types';
 export const authService = {
   async signUp(employeeId: string, password: string, username: string) {
     // Hack: Construct a fake email from employee ID
-    const email = `${employeeId}@hmatc.local`;
+    const email = `${employeeId}@qq.com`;
     
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -22,7 +22,11 @@ export const authService = {
     if (error) throw error;
 
     // Create profile entry manually
-    if (data.user) {
+    // We add a small delay and check for session to ensure RLS passes
+    if (data.user && data.session) {
+      // Small delay to allow auth state to propagate
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
       const { error: profileError } = await supabase
         .from('profiles')
         .insert([
@@ -34,7 +38,11 @@ export const authService = {
           }
         ]);
       
-      if (profileError) console.error('Error creating profile:', profileError);
+      if (profileError) {
+        // If 401/403 (RLS error) or duplicate, just log it. 
+        // The user is created in Auth, so login will still work.
+        console.warn('Profile creation warning (non-fatal):', profileError);
+      }
     }
 
     return data;
@@ -42,7 +50,7 @@ export const authService = {
 
   async signIn(employeeId: string, password: string) {
     // Hack: Reconstruct the fake email
-    const email = `${employeeId}@hmatc.local`;
+    const email = `${employeeId}@qq.com`;
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email,

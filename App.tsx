@@ -76,9 +76,16 @@ const App: React.FC = () => {
     };
     checkUser();
     
-    // Initial fetch
-    fetchData();
+    // Initial fetch (Only if logged in)
+    // fetchData(); // Moved to below
   }, [fetchData]);
+
+  // Fetch data only when user is logged in
+  useEffect(() => {
+    if (currentUser) {
+      fetchData();
+    }
+  }, [currentUser, fetchData]);
 
   // Sync favorites when user changes
   useEffect(() => {
@@ -97,6 +104,13 @@ const App: React.FC = () => {
     await authService.signOut();
     setCurrentUser(null);
   };
+
+  const tabs: { id: 'ALL' | Category; label: string; icon: React.ReactNode }[] = [
+    { id: 'ALL', label: 'All Feeds', icon: null },
+    { id: 'COCKPIT', label: 'Smart Cabin', icon: <Cpu size={16} /> },
+    { id: 'DRIVING', label: 'Autonomous Driving', icon: <Radio size={16} /> },
+    { id: 'AI', label: 'AI News', icon: <Zap size={16} /> },
+  ];
 
   const handleToggleFavorite = async (item: NewsItem) => {
     if (!currentUser) return;
@@ -123,12 +137,37 @@ const App: React.FC = () => {
     ? sourceList 
     : sourceList.filter(item => item.category === activeTab);
 
-  const tabs: { id: 'ALL' | Category; label: string; icon: React.ReactNode }[] = [
-    { id: 'ALL', label: 'All Feeds', icon: null },
-    { id: 'COCKPIT', label: 'Smart Cabin', icon: <Cpu size={16} /> },
-    { id: 'DRIVING', label: 'Autonomous Driving', icon: <Radio size={16} /> },
-    { id: 'AI', label: 'AI News', icon: <Zap size={16} /> },
-  ];
+  // If not logged in, show Auth Screen directly
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
+        {/* We can reuse AuthModal's internal form or just use AuthModal forced open */}
+        {/* However, AuthModal is designed as a modal. Let's create a dedicated login view or adapt AuthModal. */}
+        {/* For simplicity and consistency, we render a background and the AuthModal without the close button/overlay behavior if we could, 
+            but since AuthModal is a modal, let's just render it and maybe hide the close button via CSS or prop if needed.
+            Actually, let's just render the AuthModal content directly or use the Modal in a way that it can't be closed.
+        */}
+        <div className="w-full max-w-md">
+            <div className="text-center mb-8">
+                <h1 className="text-4xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 mb-4">
+                    HMATC Insider Daily
+                </h1>
+                <p className="text-gray-400">Please log in to access the latest automotive intelligence.</p>
+            </div>
+            {/* We use the AuthModal component but we need to make sure it's visible. 
+                Since AuthModal has a fixed overlay, we can just render it. 
+                But better to modify AuthModal to be 'inline' or just render it 'always open' on top of this.
+            */}
+            <AuthModal 
+                isOpen={true} 
+                onClose={() => {}} // No-op, can't close
+                onLoginSuccess={handleLoginSuccess}
+                isStandalone={true} // New prop to hide close button and overlay styles if needed
+            />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 font-sans selection:bg-blue-500/30">

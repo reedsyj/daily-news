@@ -9,9 +9,9 @@ interface AuthModalProps {
   onLoginSuccess: (user: User) => void;
 }
 
-const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSuccess }) => {
-  const [mode, setMode] = useState<'LOGIN' | 'REGISTER'>('LOGIN');
-  const [loading, setLoading] = useState(false);
+const AuthModal: React.FC<AuthModalProps> = (props) => {
+  const { isOpen, onClose, onLoginSuccess, isStandalone = false } = props;
+  const [mode, setMode] = useState<'LOGIN' | 'REGISTER'>('LOGIN');  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   // Form Fields
@@ -71,8 +71,8 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSuccess }
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl p-0 w-full max-w-md shadow-2xl relative overflow-hidden">
+    <div className={isStandalone ? "relative w-full" : "fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"}>
+      <div className={`bg-gray-900 border border-gray-700 rounded-2xl p-0 w-full ${isStandalone ? '' : 'max-w-md shadow-2xl relative'} overflow-hidden`}>
         
         {/* Header Tabs */}
         <div className="flex border-b border-gray-800">
@@ -90,12 +90,14 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSuccess }
           </button>
         </div>
 
-        <button 
-          onClick={onClose}
-          className="absolute top-4 right-4 text-gray-500 hover:text-white transition-colors z-10"
-        >
-          <X size={20} />
-        </button>
+        {!isStandalone && (
+          <button 
+            onClick={onClose}
+            className="absolute top-4 right-4 text-gray-500 hover:text-white transition-colors z-10"
+          >
+            <X size={20} />
+          </button>
+        )}
 
         <div className="p-8">
           <h2 className="text-2xl font-bold text-white mb-2">
