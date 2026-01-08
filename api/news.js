@@ -6,16 +6,25 @@ export default async function handler(req, res) {
     const category = url.searchParams.get('category') || 'ALL';
     
     // Check configuration
-    if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
-      res.status(500).json({ error: 'KV not configured' });
+    const redisUrl = process.env.REDIS_URL || process.env.KV_REST_API_URL;
+    
+    if (!redisUrl) {
+      res.status(500).json({ error: 'Redis/KV not configured' });
       return;
     }
 
-    // Initialize Redis client using Vercel KV env vars
-    const redis = createClient({
-      url: process.env.KV_REST_API_URL,
-      token: process.env.KV_REST_API_TOKEN,
-    });
+    // Initialize Redis client
+    // If using REDIS_URL, it contains user/pass/host/port
+    // If using KV_REST_API_URL, we might need token, but node-redis prefers standard redis:// URLs
+    // We'll prioritize REDIS_URL standard connection string
+    const clientOptions = { url: redisUrl };
+    
+    // Fallback for Vercel KV REST Token if using that specific setup (less likely with node-redis)
+    if (!process.env.REDIS_URL && process.env.KV_REST_API_TOKEN) {
+        clientOptions.token = process.env.KV_REST_API_TOKEN;
+    }
+
+    const redis = createClient(clientOptions);
     
     // Handle Redis connection errors
     redis.on('error', (err) => console.error('Redis Client Error', err));

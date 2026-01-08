@@ -27,22 +27,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // 2. Check Configuration
-  const KV_URL = process.env.KV_REST_API_URL;
-  const KV_TOKEN = process.env.KV_REST_API_TOKEN;
+  const redisUrl = process.env.REDIS_URL || process.env.KV_REST_API_URL;
   const GEMINI_API_KEY = process.env.API_KEY;
 
-  if (!KV_URL || !KV_TOKEN || !GEMINI_API_KEY) {
-    return res.status(500).json({ error: 'Missing environment variables (KV or Gemini)' });
+  if (!redisUrl || !GEMINI_API_KEY) {
+    return res.status(500).json({ error: 'Missing environment variables (Redis or Gemini)' });
   }
 
   try {
     const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
     
     // Initialize Redis Client
-    const redis = createClient({
-      url: KV_URL,
-      token: KV_TOKEN,
-    });
+    const clientOptions: any = { url: redisUrl };
+    if (!process.env.REDIS_URL && process.env.KV_REST_API_TOKEN) {
+        clientOptions.token = process.env.KV_REST_API_TOKEN;
+    }
+
+    const redis = createClient(clientOptions);
     
     redis.on('error', (err) => console.error('Redis Client Error', err));
     await redis.connect();
