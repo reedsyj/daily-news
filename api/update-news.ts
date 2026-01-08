@@ -12,7 +12,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // 1. Authentication Check
-  // ... (auth logic stays same)
+  // Vercel Cron automatically adds Authorization header
+  // Manual trigger requires checking Employee ID against Env Var
+  
   // Check for Cron Job
   const isCron = req.headers['user-agent']?.includes('vercel-cron') || 
                  req.headers['authorization'] === `Bearer ${process.env.CRON_SECRET}`;
@@ -48,9 +50,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     redis.on('error', (err) => console.error('Redis Client Error', err));
     await redis.connect();
 
-    const outcomes = [];
+    // 3. Generate News for Each Category
+    // Check if a specific category is requested
+    const targetCategory = req.query.category as string;
+    let categoriesToUpdate = CATEGORIES;
+    
+    if (targetCategory) {
+      if (CATEGORIES.includes(targetCategory)) {
+        categoriesToUpdate = [targetCategory];
+      } else {
+        await redis.disconnect();
+        return res.status(400).json({ error: `Invalid category. Must be one of: ${CATEGORIES.join(', ')}` });
+      }
+    }
 
-    for (const category of CATEGORIES) {
+    // OPTIMIZATION: Run in PARALLEL to avoid Vercel Function Timeout (10s limit on Hobby tier)
+    // Gemini calls take time, so parallelizing gives us the best chance to finish all 3 within the limit.
+    const updatePromises = categoriesToUpdate.map(async (category) => {
       try {
         const prompt = generatePrompt(category);
         
@@ -104,16 +120,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         })).slice(0, 20); // Keep top 20
 
         // 4. Save to Vercel KV using Redis Client
-        // Using SET to overwrite. Value must be string.
         await redis.set(`news:${category}`, JSON.stringify(processedNews));
 
-        outcomes.push({ category, status: 'success', count: processedNews.length });
+        return { category, status: 'success', count: processedNews.length };
 
       } catch (error: any) {
         console.error(`Error updating ${category}:`, error);
-        outcomes.push({ category, status: 'error', error: error.message });
+        return { category, status: 'error', error: error.message };
       }
-    }
+    });
+
+    // Wait for all updates to complete (or fail)
+    const outcomes = await Promise.all(updatePromises);
     
     await redis.disconnect();
 
