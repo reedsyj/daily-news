@@ -38,34 +38,27 @@ const App: React.FC = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     
-    // Fetch categories in parallel
-    const [cockpit, driving, ai] = await Promise.all([
-      fetchAnalysedNews('COCKPIT'),
-      fetchAnalysedNews('DRIVING'),
-      fetchAnalysedNews('AI')
-    ]);
-
-    const combined = [...cockpit, ...driving, ...ai];
-    
-    // Sorting Logic:
-    // 1. Value/Rating (High to Low)
-    // 2. Publication Time (New to Old)
-    const sorted = combined.sort((a, b) => {
-      const ratingA = a.rating ?? 0;
-      const ratingB = b.rating ?? 0;
+    try {
+      // Use our proxy API which fetches from KV
+      // This is fast and doesn't consume Gemini tokens per user
+      const res = await fetch('/api/news?category=ALL');
+      if (!res.ok) throw new Error('Failed to fetch news');
+      const data = await res.json();
       
-      // Primary Sort: Rating Descending
-      if (ratingA !== ratingB) {
-        return ratingB - ratingA;
-      }
+      const sorted = data.sort((a: NewsItem, b: NewsItem) => {
+        const ratingA = a.rating ?? 0;
+        const ratingB = b.rating ?? 0;
+        if (ratingA !== ratingB) return ratingB - ratingA;
+        return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+      });
       
-      // Secondary Sort: Time Descending
-      return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
-    });
-    
-    setNews(sorted);
-    setLastUpdated(new Date());
-    setLoading(false);
+      setNews(sorted);
+      setLastUpdated(new Date());
+    } catch (error) {
+      console.error('Error fetching news:', error);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -125,9 +118,39 @@ const App: React.FC = () => {
     refreshFavorites();
   };
 
-  const handleRefresh = () => {
-    if (!isAdmin) return;
-    fetchData();
+  const handleRefresh = async () => {
+    if (!isAdmin || !currentUser) return;
+    
+    // User confirmation instead of password
+    if (!confirm("Confirm to refresh news manually? This may take up to 60 seconds.")) return;
+
+    setLoading(true);
+    try {
+      // Send Employee ID in header for auth check
+      const res = await fetch('/api/update-news', {
+        method: 'POST',
+        headers: {
+          'X-Employee-ID': currentUser.employeeId
+        }
+      });
+      
+      if (res.status === 401) {
+        alert("Unauthorized: You are not an admin.");
+        return;
+      }
+      
+      if (!res.ok) {
+        throw new Error('Update failed');
+      }
+
+      const result = await res.json();
+      alert(`Update Started! Results: ${JSON.stringify(result.results.map((r: any) => r.status))}`);
+      fetchData(); // Reload data after update
+    } catch (error: any) {
+      alert(`Error: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Decide which list to render
