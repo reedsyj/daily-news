@@ -133,35 +133,41 @@ const App: React.FC = () => {
     setLoading(true);
     try {
       // 1. Fetch from Gemini (Frontend -> API -> Gemini)
-      // This runs on the client side logic (waiting for response), so it won't timeout like Vercel Serverless
+      // SERIAL EXECUTION: Run one by one to avoid Gemini 503 Overloaded error
       const categories: Category[] = ['COCKPIT', 'DRIVING', 'AI'];
       
-      const results = await Promise.allSettled(categories.map(async (cat) => {
-        // Use existing service to fetch generated news
-        const newsItems = await fetchAnalysedNews(cat);
-        if (newsItems.length === 0) throw new Error(`No news generated for ${cat}`);
-        
-        // 2. Save to Redis (Frontend -> API -> Redis)
-        const saveRes = await fetch('/api/save-news', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Employee-ID': currentUser.employeeId
-          },
-          body: JSON.stringify({ category: cat, news: newsItems })
-        });
+      let successCount = 0;
+      let failCount = 0;
 
-        if (!saveRes.ok) {
-           throw new Error(`Failed to save ${cat}: ${saveRes.statusText}`);
+      for (const cat of categories) {
+        try {
+          // Add a small delay between requests to be gentle on the API
+          if (successCount > 0 || failCount > 0) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+
+          // Use existing service to fetch generated news
+          const newsItems = await fetchAnalysedNews(cat);
+          if (newsItems.length === 0) throw new Error(`No news generated for ${cat}`);
+          
+          // 2. Save to Redis (Frontend -> API -> Redis)
+          const saveRes = await fetch('/api/save-news', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Employee-ID': currentUser.employeeId
+            },
+            body: JSON.stringify({ category: cat, news: newsItems })
+          });
+
+          if (!saveRes.ok) {
+             throw new Error(`Failed to save ${cat}: ${saveRes.statusText}`);
+          }
+          successCount++;
+        } catch (e) {
+          console.error(`Error updating ${cat}:`, e);
+          failCount++;
         }
-        return cat;
-      }));
-
-      const successCount = results.filter(r => r.status === 'fulfilled').length;
-      const failCount = results.filter(r => r.status === 'rejected').length;
-
-      if (failCount > 0) {
-        console.error('Some updates failed:', results);
       }
 
       alert(`Update Completed! Success: ${successCount}, Failed: ${failCount}. Reloading data...`);
