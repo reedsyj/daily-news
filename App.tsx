@@ -128,32 +128,41 @@ const App: React.FC = () => {
   const handleRefresh = async () => {
     if (!isAdmin || !currentUser) return;
     
-    if (!confirm("Confirm to refresh news manually? This will trigger 3 separate updates to avoid timeouts.")) return;
+    if (!confirm("Confirm to refresh news manually? This will take 1-2 minutes. Please do not close the page.")) return;
 
     setLoading(true);
     try {
-      // Parallelize 3 separate requests, one for each category
-      // This avoids the single Vercel function timeout (10s)
-      const categories = ['COCKPIT', 'DRIVING', 'AI'];
-      const requests = categories.map(cat => 
-        fetch(`/api/update-news?category=${cat}`, {
+      // 1. Fetch from Gemini (Frontend -> API -> Gemini)
+      // This runs on the client side logic (waiting for response), so it won't timeout like Vercel Serverless
+      const categories: Category[] = ['COCKPIT', 'DRIVING', 'AI'];
+      
+      const results = await Promise.allSettled(categories.map(async (cat) => {
+        // Use existing service to fetch generated news
+        const newsItems = await fetchAnalysedNews(cat);
+        if (newsItems.length === 0) throw new Error(`No news generated for ${cat}`);
+        
+        // 2. Save to Redis (Frontend -> API -> Redis)
+        const saveRes = await fetch('/api/save-news', {
           method: 'POST',
           headers: {
+            'Content-Type': 'application/json',
             'X-Employee-ID': currentUser.employeeId
-          }
-        }).then(async (res) => {
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            throw new Error(`Failed to update ${cat}: ${err.error || res.statusText}`);
-          }
-          return res.json();
-        })
-      );
+          },
+          body: JSON.stringify({ category: cat, news: newsItems })
+        });
 
-      const results = await Promise.allSettled(requests);
-      
+        if (!saveRes.ok) {
+           throw new Error(`Failed to save ${cat}: ${saveRes.statusText}`);
+        }
+        return cat;
+      }));
+
       const successCount = results.filter(r => r.status === 'fulfilled').length;
       const failCount = results.filter(r => r.status === 'rejected').length;
+
+      if (failCount > 0) {
+        console.error('Some updates failed:', results);
+      }
 
       alert(`Update Completed! Success: ${successCount}, Failed: ${failCount}. Reloading data...`);
       fetchData(); // Reload data after update
