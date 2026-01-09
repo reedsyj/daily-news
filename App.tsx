@@ -38,34 +38,27 @@ const App: React.FC = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     
-    // Fetch categories in parallel
-    const [cockpit, driving, ai] = await Promise.all([
-      fetchAnalysedNews('COCKPIT'),
-      fetchAnalysedNews('DRIVING'),
-      fetchAnalysedNews('AI')
-    ]);
-
-    const combined = [...cockpit, ...driving, ...ai];
-    
-    // Sorting Logic:
-    // 1. Value/Rating (High to Low)
-    // 2. Publication Time (New to Old)
-    const sorted = combined.sort((a, b) => {
-      const ratingA = a.rating ?? 0;
-      const ratingB = b.rating ?? 0;
+    try {
+      // Use our proxy API which fetches from KV/Redis
+      // This is fast and doesn't consume Gemini tokens per user
+      const res = await fetch('/api/news?category=ALL');
+      if (!res.ok) throw new Error('Failed to fetch news from cache');
+      const data = await res.json();
       
-      // Primary Sort: Rating Descending
-      if (ratingA !== ratingB) {
-        return ratingB - ratingA;
-      }
+      const sorted = data.sort((a: NewsItem, b: NewsItem) => {
+        const ratingA = a.rating ?? 0;
+        const ratingB = b.rating ?? 0;
+        if (ratingA !== ratingB) return ratingB - ratingA;
+        return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+      });
       
-      // Secondary Sort: Time Descending
-      return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
-    });
-    
-    setNews(sorted);
-    setLastUpdated(new Date());
-    setLoading(false);
+      setNews(sorted);
+      setLastUpdated(new Date());
+    } catch (error) {
+      console.error('Error fetching news:', error);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -140,33 +133,43 @@ const App: React.FC = () => {
       let failCount = 0;
 
       for (const cat of categories) {
-        try {
-          // Add a small delay between requests to be gentle on the API
-          if (successCount > 0 || failCount > 0) {
-            await new Promise(resolve => setTimeout(resolve, 2000));
-          }
+        let attempts = 0;
+        const maxAttempts = 2;
+        let success = false;
 
-          // Use existing service to fetch generated news
-          const newsItems = await fetchAnalysedNews(cat);
-          if (newsItems.length === 0) throw new Error(`No news generated for ${cat}`);
-          
-          // 2. Save to Redis (Frontend -> API -> Redis)
-          const saveRes = await fetch('/api/save-news', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Employee-ID': currentUser.employeeId
-            },
-            body: JSON.stringify({ category: cat, news: newsItems })
-          });
+        while (attempts < maxAttempts && !success) {
+          try {
+            // Add a small delay between requests (and exponential backoff for retries)
+            const delay = (successCount > 0 || failCount > 0) ? 2000 : 0;
+            const retryDelay = attempts > 0 ? 5000 : 0;
+            await new Promise(resolve => setTimeout(resolve, delay + retryDelay));
 
-          if (!saveRes.ok) {
-             throw new Error(`Failed to save ${cat}: ${saveRes.statusText}`);
+            // Use existing service to fetch generated news
+            const newsItems = await fetchAnalysedNews(cat);
+            if (newsItems.length === 0) throw new Error(`No news generated for ${cat}`);
+            
+            // 2. Save to Redis (Frontend -> API -> Redis)
+            const saveRes = await fetch('/api/save-news', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Employee-ID': currentUser.employeeId
+              },
+              body: JSON.stringify({ category: cat, news: newsItems })
+            });
+
+            if (!saveRes.ok) {
+               throw new Error(`Failed to save ${cat}: ${saveRes.statusText}`);
+            }
+            successCount++;
+            success = true;
+          } catch (e: any) {
+            console.error(`Error updating ${cat} (Attempt ${attempts + 1}):`, e);
+            attempts++;
+            if (attempts >= maxAttempts) {
+               failCount++;
+            }
           }
-          successCount++;
-        } catch (e) {
-          console.error(`Error updating ${cat}:`, e);
-          failCount++;
         }
       }
 
